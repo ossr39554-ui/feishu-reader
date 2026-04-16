@@ -1,17 +1,43 @@
 """飞书云文档提取工具 - PyQt6 桌面应用"""
 import sys
 import os
+import json
 import datetime
 import re
+from pathlib import Path
 from PyQt6.QtWidgets import (
     QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
     QLabel, QLineEdit, QPushButton, QTextEdit, QMessageBox,
-    QProgressBar, QFileDialog
+    QProgressBar, QFileDialog, QCheckBox
 )
 from PyQt6.QtCore import QThread, pyqtSignal, Qt
 
 from fetcher import FeishuFetcher
 from parser import BlockParser
+
+
+def get_config_path():
+    """获取配置文件路径"""
+    app_dir = Path.home() / ".feishu_reader"
+    app_dir.mkdir(exist_ok=True)
+    return app_dir / "config.json"
+
+
+def load_config():
+    """加载配置"""
+    config_path = get_config_path()
+    if config_path.exists():
+        try:
+            return json.loads(config_path.read_text())
+        except:
+            return {}
+    return {}
+
+
+def save_config(token):
+    """保存 Token"""
+    config_path = get_config_path()
+    config_path.write_text(json.dumps({"token": token}, ensure_ascii=False))
 
 
 class FetchWorker(QThread):
@@ -69,6 +95,14 @@ class MainWindow(QMainWindow):
         self.setWindowTitle("飞书文档提取工具")
         self.setMinimumWidth(600)
         self.setup_ui()
+        self.load_saved_token()
+
+    def load_saved_token(self):
+        """加载保存的 Token"""
+        config = load_config()
+        if config.get("token"):
+            self.token_input.setText(config["token"])
+            self.save_token_cb.setChecked(True)
 
     def setup_ui(self):
         central_widget = QWidget()
@@ -87,9 +121,11 @@ class MainWindow(QMainWindow):
         token_layout = QHBoxLayout()
         token_layout.addWidget(QLabel("Access Token:"))
         self.token_input = QLineEdit()
-        self.token_input.setPlaceholderText("可选：用于访问需要权限的文档")
+        self.token_input.setPlaceholderText("用于访问需要权限的文档")
         self.token_input.setEchoMode(QLineEdit.EchoMode.Password)
         token_layout.addWidget(self.token_input)
+        self.save_token_cb = QCheckBox("记住Token")
+        token_layout.addWidget(self.save_token_cb)
         layout.addLayout(token_layout)
 
         # 提取按钮
@@ -120,6 +156,16 @@ class MainWindow(QMainWindow):
             return
 
         token = self.token_input.text().strip()
+
+        # 保存 Token
+        if self.save_token_cb.isChecked() and token:
+            save_config(token)
+        elif self.save_token_cb.isChecked() and not token:
+            # 取消勾选时清除保存的 Token
+            save_config("")
+        elif not self.save_token_cb.isChecked():
+            # 未勾选时删除已保存的 Token
+            save_config("")
 
         # 选择输出目录
         output_dir = QFileDialog.getExistingDirectory(
