@@ -96,15 +96,14 @@ class BlockParser:
         return "\n".join(result)
 
     def parse_image(self, block: dict) -> str:
-        """解析图片 - 新版 API 使用 image.token"""
+        """解析图片 - 返回占位符"""
         image_info = block.get("image", {})
         token = image_info.get("token", "")
+        width = image_info.get("width", 0)
+        height = image_info.get("height", 0)
 
-        if token in self.image_map and self.image_map[token]:
-            filename = self.image_map[token]
-            return f"![image](assets/{filename})"
-        elif token:
-            return f"![image](assets/image_{token}.png)"
+        if token:
+            return f"<!-- 图片: {token} ({width}x{height}) -->"
         return ""
 
     def parse_sheet(self, block: dict) -> str:

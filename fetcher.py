@@ -111,33 +111,8 @@ class FeishuFetcher:
 
         log(f"获取到 {len(blocks)} 个 blocks")
 
-        # 收集所有图片
-        image_keys = set()
-        for block in blocks:
-            block_type = block.get("block_type", 0)
-
-            # 图片类型：block_type == 27 (新版 API)
-            if block_type == 27:
-                token = block.get("image", {}).get("token")
-                if token:
-                    image_keys.add(token)
-
-        # 下载图片
-        assets_dir = os.path.join(output_dir, "assets")
-        os.makedirs(assets_dir, exist_ok=True)
-
-        image_map = {}
-        for i, image_key in enumerate(image_keys):
-            log(f"下载图片 ({i+1}/{len(image_keys)})...")
-            try:
-                filename = self.download_image(image_key, assets_dir)
-                image_map[image_key] = filename
-            except Exception as e:
-                log(f"  图片下载失败: {e}")
-                image_map[image_key] = None
-
         return {
             "doc_token": doc_token,
             "blocks": blocks,
-            "image_map": image_map,
+            "image_map": {},
         }
