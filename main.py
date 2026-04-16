@@ -4,6 +4,7 @@ import os
 import json
 import datetime
 import re
+import requests
 from pathlib import Path
 from PyQt6.QtWidgets import (
     QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
@@ -14,6 +15,10 @@ from PyQt6.QtCore import QThread, pyqtSignal, Qt
 
 from fetcher import FeishuFetcher
 from parser import BlockParser
+
+
+APP_ID = "cli_a96a6f00b6ba9bde"
+APP_SECRET = "lSo2Wnbuy6CfJc4CAeqBuWoYNZZ2M7Hx"
 
 
 def get_config_path():
@@ -38,6 +43,16 @@ def save_config(token):
     """保存 Token"""
     config_path = get_config_path()
     config_path.write_text(json.dumps({"token": token}, ensure_ascii=False))
+
+
+def refresh_token() -> str:
+    """自动获取新 Token"""
+    url = "https://open.feishu.cn/open-apis/auth/v3/tenant_access_token/internal"
+    resp = requests.post(url, json={"app_id": APP_ID, "app_secret": APP_SECRET}, timeout=10)
+    data = resp.json()
+    if data.get("code") == 0:
+        return data.get("tenant_access_token", "")
+    raise Exception(f"获取Token失败: {data.get('msg', '未知错误')}")
 
 
 class FetchWorker(QThread):
@@ -104,6 +119,24 @@ class MainWindow(QMainWindow):
             self.token_input.setText(config["token"])
             self.save_token_cb.setChecked(True)
 
+    def on_refresh_token(self):
+        """刷新 Token"""
+        self.refresh_btn.setEnabled(False)
+        self.refresh_btn.setText("刷新中...")
+        self.statusBar().showMessage("正在获取 Token...")
+        try:
+            new_token = refresh_token()
+            self.token_input.setText(new_token)
+            self.save_token_cb.setChecked(True)
+            save_config(new_token)
+            self.statusBar().showMessage("Token 已刷新并保存")
+        except Exception as e:
+            QMessageBox.critical(self, "错误", f"获取 Token 失败:\n{e}")
+            self.statusBar().showMessage("获取 Token 失败")
+        finally:
+            self.refresh_btn.setEnabled(True)
+            self.refresh_btn.setText("刷新")
+
     def setup_ui(self):
         central_widget = QWidget()
         self.setCentralWidget(central_widget)
@@ -117,14 +150,20 @@ class MainWindow(QMainWindow):
         url_layout.addWidget(self.url_input)
         layout.addLayout(url_layout)
 
-        # Token 输入（可选）
+        # Token 输入
         token_layout = QHBoxLayout()
         token_layout.addWidget(QLabel("Access Token:"))
         self.token_input = QLineEdit()
         self.token_input.setPlaceholderText("用于访问需要权限的文档")
         self.token_input.setEchoMode(QLineEdit.EchoMode.Password)
         token_layout.addWidget(self.token_input)
-        self.save_token_cb = QCheckBox("记住Token")
+
+        self.refresh_btn = QPushButton("刷新")
+        self.refresh_btn.setFixedWidth(60)
+        self.refresh_btn.clicked.connect(self.on_refresh_token)
+        token_layout.addWidget(self.refresh_btn)
+
+        self.save_token_cb = QCheckBox("记住")
         token_layout.addWidget(self.save_token_cb)
         layout.addLayout(token_layout)
 
